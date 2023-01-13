@@ -4,16 +4,22 @@ export default class Engine {
     obstacleColor = 'lightblue';
     constructor(ctx) {
         this.ctx = ctx;
-        this.setCanvasBounds();
-        new Line({
-            x1: 50n,
-            y1: 50n,
-            x2: 60n,
-            y2: 51n,
-            ctx: this.ctx,
-            obstacleColor: this.obstacleColor,
-            velocity: 0.01,
-        });
+        for (let x = 0; x < 10; x++) {
+            new Line({
+                x1: Math.round(Math.random() * 1000),
+                y1: Math.round(Math.random() * 500),
+                x2: Math.round(Math.random() * 1000),
+                y2: Math.round(Math.random() * 500),
+                ctx: this.ctx,
+                obstacleColor: this.obstacleColor,
+                increment: 1,
+                color: {
+                    R: Math.random() * 255,
+                    G: Math.random() * 255,
+                    B: Math.random() * 255,
+                },
+            });
+        }
     }
     setCanvasBounds() {
         const { width, height } = this.ctx.canvas;

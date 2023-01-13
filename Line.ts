@@ -1,24 +1,31 @@
+import { Color } from './Color.js'
+
 export type Attributes<T> = {
   [K in keyof T as T[K] extends Function ? never : K]: T[K]
 }
 
 export default class Line {
-  public x1!: bigint
-  public y1!: bigint
-  public x2!: bigint
-  public y2!: bigint
+  public x1!: number
+  public y1!: number
+  public x2!: number
+  public y2!: number
   public ctx!: CanvasRenderingContext2D
   public obstacleColor!: string
-  public velocity!: bigint
-  public UPDATES_PER_SECOND = 60
+  public increment!: number
+  public color!: Color
+  public UPDATES_PER_SECOND = 30
 
-  public constructor(line: Attributes<Line> & { UPDATE_PER_SECOND?: number }) {
+  public constructor(
+    line: Omit<Attributes<Line>, 'UPDATES_PER_SECOND'> & {
+      UPDATES_PER_SECOND?: number
+    }
+  ) {
     Object.assign(this, line)
 
     this.draw(this.x1, this.x2, this.y1, this.y2)
     setInterval(() => {
       this.update()
-    }, this.UPDATES_PER_SECOND / 1000)
+    }, 1000 / this.UPDATES_PER_SECOND)
   }
 
   public update(): void {
@@ -26,64 +33,134 @@ export default class Line {
 
     //Check if the points are in are in the canvas
     const { width, height } = this.ctx.canvas
-    if (
-      this.x1 > 0 &&
-      this.x1 < width &&
-      this.x2 > 0 &&
-      this.x2 < width &&
-      this.y1 > 0 &&
-      this.y1 < height &&
-      this.y2 > 0 &&
-      this.y2 < height
-    ) {
-      //Use the slope to change the end point of the line
-      this.x2 += (this.x2 - this.x1) * this.velocity
-      this.y2 += (this.y2 - this.y1) * this.velocity
 
-      this.draw(this.x1, this.x2, this.y1, this.y2)
+    if (this.x2 >= width || this.x2 <= 0) {
+      const tmpX = this.x2
+      const tmpY = this.y2
 
-      this.x1 = this.x2 - 1n
-      this.y1 = this.y2 - 1n
+      this.x2 += (this.x2 - this.x1) * -1
+      this.y2 += this.y2 - this.y1
 
-      console.log(this.x1, this.x2, this.y1, this.y2)
+      this.x1 = tmpX
+      this.y1 = tmpY
+    }
+
+    if (this.y2 >= height || this.y2 <= 0) {
+      const tmpX = this.x2
+      const tmpY = this.y2
+
+      this.x2 += this.x2 - this.x1
+      this.y2 += (this.y2 - this.y1) * -1
+
+      this.x1 = tmpX
+      this.y1 = tmpY
+    }
+
+    //Use the slope to change the end point of the line
+    this.x2 += this.x2 - this.x1
+    this.y2 += this.y2 - this.y1
+
+    this.getSlope('x')
+    console.log(this.x2 - this.x1, this.y2 - this.y1)
+
+    this.draw(this.x1, this.x2, this.y1, this.y2)
+
+    //Get the center point of the line
+    this.x1 = (this.x1 + this.x2) / 2
+    this.y1 = (this.y1 + this.y2) / 2
+  }
+
+  public getSlope(XorY: string): number {
+    let xLimit = this.y2 - this.y1
+    let yLimit = 1 / (this.x2 - this.x1)
+
+    let finalX = 1
+    let finalY = 1
+
+    //Based on the two limits, choose the one that's less than 1
+    if (xLimit > 0 && yLimit > 0) {
+      if (xLimit < yLimit) {
+        finalY = yLimit
+      } else {
+        finalX = xLimit
+      }
+    }
+
+    console.log({ finalX, finalY })
+
+    if (XorY === 'x') return Math.round(finalX * this.increment * 10)
+
+    if (XorY === 'y') return Math.round(finalY * this.increment * 10)
+
+    throw new Error("XorY must be 'x' or 'y'")
+  }
+
+  public draw(x1: number, x2: number, y1: number, y2: number): void {
+    //Implement Xiaolin Wu's line algorithm
+    //https://en.wikipedia.org/wiki/Xiaolin_Wu%27s_line_algorithm
+
+    const steep = Math.abs(y2 - y1) > Math.abs(x2 - x1)
+    if (steep) {
+      ;[x1, y1] = [y1, x1]
+      ;[x2, y2] = [y2, x2]
+    }
+
+    if (x1 > x2) {
+      ;[x1, x2] = [x2, x1]
+      ;[y1, y2] = [y2, y1]
+    }
+
+    const dx = x2 - x1
+    const dy = y2 - y1
+    const gradient = dy / dx
+
+    let xEnd = Math.round(x1)
+    let yEnd = y1 + gradient * (xEnd - x1)
+    let xGap = 1 - ((x1 + 0.5) % 1)
+    let xpxl1 = xEnd
+    let ypxl1 = Math.floor(yEnd)
+
+    if (steep) {
+      this.plot(ypxl1, xpxl1, 1 - (yEnd % 1) * xGap)
+      this.plot(ypxl1 + 1, xpxl1, (yEnd % 1) * xGap)
     } else {
-      throw new Error('Line is out of bounds')
+      this.plot(xpxl1, ypxl1, 1 - (yEnd % 1) * xGap)
+      this.plot(xpxl1, ypxl1 + 1, (yEnd % 1) * xGap)
+    }
+
+    let intery = yEnd + gradient
+
+    xEnd = Math.round(x2)
+    yEnd = y2 + gradient * (xEnd - x2)
+    xGap = (x2 + 0.5) % 1
+    let xpxl2 = xEnd
+    let ypxl2 = Math.floor(yEnd)
+
+    if (steep) {
+      this.plot(ypxl2, xpxl2, 1 - (yEnd % 1) * xGap)
+      this.plot(ypxl2 + 1, xpxl2, (yEnd % 1) * xGap)
+    } else {
+      this.plot(xpxl2, ypxl2, 1 - (yEnd % 1) * xGap)
+      this.plot(xpxl2, ypxl2 + 1, (yEnd % 1) * xGap)
+    }
+
+    if (steep) {
+      for (let x = xpxl1 + 1; x <= xpxl2 - 1; x++) {
+        this.plot(Math.floor(intery), x, 1 - (intery % 1))
+        this.plot(Math.floor(intery) + 1, x, intery % 1)
+        intery += gradient
+      }
+    } else {
+      for (let x = xpxl1 + 1; x <= xpxl2 - 1; x++) {
+        this.plot(x, Math.floor(intery), 1 - (intery % 1))
+        this.plot(x, Math.floor(intery) + 1, intery % 1)
+        intery += gradient
+      }
     }
   }
 
-  public draw(x1: bigint, x2: bigint, y1: bigint, y2: bigint): void {
-    //Implement Bresenham's Line Algorithm
-    //https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
-
-    //Round every point to the nearest integer
-
-    const dx = Math.abs(x2 - x1)
-    const dy = Math.abs(y2 - y1)
-    const sx = x1 < x2 ? 1 : -1
-    const sy = y1 < y2 ? 1 : -1
-    let err = dx - dy
-
-    while (true) {
-      this.plot(x1, y1, 1)
-
-      if (x1 === x2 && y1 === y2) {
-        break
-      }
-
-      const e2 = 2 * err
-      if (e2 > -dy) {
-        err -= dy
-        x1 += sx
-      }
-      if (e2 < dx) {
-        err += dx
-        y1 += sy
-      }
-    }
-  }
-
-  public plot(x: bigint, y: bigint, opacity: number): void {
-    this.ctx.fillStyle = 'rgba(255, 0, 0, ' + opacity + ')'
+  public plot(x: number, y: number, opacity: number): void {
+    this.ctx.fillStyle = `rgba(${this.color.R}, ${this.color.G}, ${this.color.B}, ${opacity})`
     this.ctx
     this.ctx.fillRect(x, y, 1, 1)
   }
